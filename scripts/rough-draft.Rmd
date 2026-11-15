@@ -3,4 +3,102 @@ title: "rough-draft"
 output: html_document
 ---
 
-test
+# Initial Set Up
+```{r}
+library(tidyverse)
+library(MASS)
+```
+
+
+# Reading in Data
+```{r}
+# reading in original data
+team_stats <- read.csv('../data/TeamStatistics.csv')
+
+# formatting data as monthly averages of free throw 
+fta_monthly <- team_stats %>%
+  # only looking at Regular Season games
+  filter(gameType == "Regular Season") %>%
+  
+  # formatting as monthly events
+  mutate(year_month = floor_date(as_date(gameDate), "month")) %>%
+  group_by(year_month) %>%
+  
+  # average fta per month
+  summarise(fta_monthly = mean(freeThrowsAttempted, na.rm = T),
+            n_games = n()) %>%
+  
+  # filtering out seasons before year 1980 and after 2019
+  filter(year_month >= "1980-10-1", year_month < "2019-10-1") %>%
+  
+  mutate(m = month(year_month), 
+         season = if_else(m >= 10, year(year_month), year(year_month) - 1L))
+```
+## which months to drop
+```{r}
+table(fta_monthly$m)
+```
+
+drop 5, 10
+5 and 10 don't have many appearances compared to the other months
+done to simplify project
+
+```{r}
+ts_fta <- fta_monthly %>%
+  filter(!(m %in% c(5,10))) %>%
+  arrange(year_month) %>%
+  pull(fta_monthly) %>% 
+  ts()
+```
+
+## Splitting Data Into Training/Testing Sets
+```{r}
+ts_train <- ts_fta[1:221]
+ts_test <- ts_fta[222:227]
+```
+
+We will be predicting the 2019 regular season free throw attempts.
+
+# Plotting and Analyzing Training Set
+
+## Initial Plot
+```{r}
+plot.ts(ts_train, type = "l", xlab = "Time (Months)",
+        ylab = "Average Free Throws Attempts", 
+        main = "Average Free Throw Attempts per Month")
+```
+
+appears to a linear trend and changing variance 
+
+# Transforming and Differencing Series
+## Checking if box-cox transformation is necessary
+```{r}
+t <- 1:length(ts_train)
+
+bc_fta <- boxcox(ts_train ~ t)
+
+ts_fta_bc <- log(ts_train)
+```
+
+$\hat\lambda$'s confidence interval contains 0, which means the transformation we should use is log transformation. 
+
+## differencing selection
+```{r}
+ts_fta_bc_d1 <- diff(ts_fta_bc, lag = 1)
+var(ts_fta_bc_d1)
+
+ts_fta_bc_d1_1 <- diff(ts_fta_bc_d1, lag = 1)
+var(ts_fta_bc_d1_1)
+
+ts_fta_bc_d6 <- diff(ts_fta_bc, lag = 6)
+var(ts_fta_bc_d6)
+
+ts_fta_bc_d1_6 <- diff(ts_fta_bc_d1, lag = 6)
+var(ts_fta_bc_d1_6)
+```
+differencing at lag 1 once has the lowest variance so we will select $d=1$
+
+```{r}
+plot.ts(ts_fta_bc_d1)
+```
+
