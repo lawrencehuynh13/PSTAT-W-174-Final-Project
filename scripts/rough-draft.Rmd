@@ -7,6 +7,9 @@ output: html_document
 ```{r}
 library(tidyverse)
 library(MASS)
+library(ggplot2)
+library(ggfortify)
+set.seed(13)
 ```
 
 
@@ -63,9 +66,13 @@ We will be predicting the 2019 regular season free throw attempts.
 
 ## Initial Plot
 ```{r}
+# initial plot
 plot.ts(ts_train, type = "l", xlab = "Time (Months)",
         ylab = "Average Free Throws Attempts", 
         main = "Average Free Throw Attempts per Month")
+
+# initial histogram
+hist(ts_train, xlab = "")
 ```
 
 appears to a linear trend and changing variance 
@@ -77,10 +84,23 @@ t <- 1:length(ts_train)
 
 bc_fta <- boxcox(ts_train ~ t)
 
+# obtaining estimate and C.I. of lambda
+bc_fta$x[which(bc_fta$y == max(bc_fta$y))]
+
 ts_fta_bc <- log(ts_train)
 ```
 
 $\hat\lambda$'s confidence interval contains 0, which means the transformation we should use is log transformation. 
+
+## decomposition of series
+```{r}
+y <- ts(as.numeric(ts_fta_bc), frequency = 6)
+
+decomp <- decompose(y)
+
+plot(decomp)
+```
+
 
 ## differencing selection
 ```{r}
@@ -95,10 +115,23 @@ var(ts_fta_bc_d6)
 
 ts_fta_bc_d1_6 <- diff(ts_fta_bc_d1, lag = 6)
 var(ts_fta_bc_d1_6)
+
+ts_fta_bc_d12 <- diff(ts_fta_bc, lag = 12)
+var(ts_fta_bc_d12)
+
+ts_fta_bc_d1_12 <- diff(ts_fta_bc_d1, lag = 12)
+var(ts_fta_bc_d1_12)
 ```
 differencing at lag 1 once has the lowest variance so we will select $d=1$
 
 ```{r}
 plot.ts(ts_fta_bc_d1)
+hist(ts_fta_bc_d1)
+```
+# estimating model
+## P/ACF plot
+```{r}
+acf(ts_fta_bc_d1, lag.max = 50)
+pacf(ts_fta_bc_d1, lag.max = 50)
 ```
 
