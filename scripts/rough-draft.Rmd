@@ -5,6 +5,10 @@ output: html_document
 
 # Initial Set Up
 ```{r}
+# uncomment for mac 
+#options(rgl.useNULL = TRUE)
+#Sys.setenv(RGL_USE_NULL = TRUE)
+
 library(tidyverse)
 library(MASS)
 library(ggplot2)
