@@ -9,6 +9,7 @@ library(tidyverse)
 library(MASS)
 library(ggplot2)
 library(ggfortify)
+library(qpcR)
 set.seed(13)
 ```
 
@@ -128,10 +129,57 @@ differencing at lag 1 once has the lowest variance so we will select $d=1$
 plot.ts(ts_fta_bc_d1)
 hist(ts_fta_bc_d1)
 ```
-# estimating model
+# Estimating model
 ## P/ACF plot
 ```{r}
 acf(ts_fta_bc_d1, lag.max = 50)
 pacf(ts_fta_bc_d1, lag.max = 50)
 ```
+
+## Estimating Parameters
+```{r}
+# SARIMA(2, 1, 1) (1, 0, 2)12
+(SARIMA211_102_12 <- arima(ts_fta_bc, order = c(2, 1, 1), 
+      seasonal = list(order = c(1, 0, 2), period = 12),
+      method = "ML"))
+AICc(SARIMA211_102_12)
+
+(SARIMA211_102_12_0Check <- arima(ts_fta_bc, order = c(2, 1, 1), 
+      seasonal = list(order = c(1, 0, 2), period = 12),
+      transform.pars = F, 
+      fixed = c(0, 0, NA, 0, 0, 0),
+      method = "ML"))
+AICc(SARIMA211_102_12_0Check)
+```
+
+```{r}
+# SARIMA(4, 1, 1) (1, 0, 2)12
+(SARIMA411_102_12 <- arima(ts_fta_bc, order = c(4, 1, 1), 
+      seasonal = list(order = c(1, 0, 2), period = 12),
+      method = "ML"))
+AICc(SARIMA411_102_12)
+
+(SARIMA411_102_12_0Check <- arima(ts_fta_bc, order = c(4, 1, 1), 
+      seasonal = list(order = c(1, 0, 2), period = 12),
+      transform.pars = F,
+      fixed = c(NA, 0, 0, 0, NA, 0, 0, 0),
+      method = "ML"))
+AICc(SARIMA411_102_12_0Check)
+```
+
+```{r}
+# SARIMA(2, 1, 2) (1, 0, 2)12
+(SARIMA212_102_12 <- arima(ts_fta_bc, order = c(2, 1, 2), 
+      seasonal = list(order = c(1, 0, 2), period = 12),
+      method = "ML"))
+AICc(SARIMA212_102_12)
+
+(SARIMA212_102_12_0Check <- arima(ts_fta_bc, order = c(2, 1, 2), 
+      seasonal = list(order = c(1, 0, 2), period = 12),
+      transform.pars = F,
+      fixed = c(NA, NA, NA, NA, 0, 0, 0),
+      method = "ML"))
+AICc(SARIMA212_102_12_0Check)
+```
+
 
