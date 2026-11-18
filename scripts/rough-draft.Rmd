@@ -14,6 +14,7 @@ library(MASS)
 library(ggplot2)
 library(ggfortify)
 library(qpcR)
+source("../class_resources/plot.roots.R")
 set.seed(13)
 ```
 
@@ -37,7 +38,7 @@ fta_monthly <- team_stats %>%
             n_games = n()) %>%
   
   # filtering out seasons before year 1980 and after 2019
-  filter(year_month >= "1980-10-1", year_month < "2019-10-1") %>%
+  filter(year_month >= "1990-10-1", year_month < "2019-10-1") %>%
   
   mutate(m = month(year_month), 
          season = if_else(m >= 10, year(year_month), year(year_month) - 1L))
@@ -61,8 +62,8 @@ ts_fta <- fta_monthly %>%
 
 ## Splitting Data Into Training/Testing Sets
 ```{r}
-ts_train <- ts_fta[1:221]
-ts_test <- ts_fta[222:227]
+ts_train <- ts_fta[1:162]
+ts_test <- ts_fta[163:168]
 ```
 
 We will be predicting the 2019 regular season free throw attempts.
@@ -120,70 +121,189 @@ var(ts_fta_bc_d6)
 
 ts_fta_bc_d1_6 <- diff(ts_fta_bc_d1, lag = 6)
 var(ts_fta_bc_d1_6)
-
-ts_fta_bc_d12 <- diff(ts_fta_bc, lag = 12)
-var(ts_fta_bc_d12)
-
-ts_fta_bc_d1_12 <- diff(ts_fta_bc_d1, lag = 12)
-var(ts_fta_bc_d1_12)
 ```
 differencing at lag 1 once has the lowest variance so we will select $d=1$
 
 ```{r}
 plot.ts(ts_fta_bc_d1)
 hist(ts_fta_bc_d1)
+
+plot.ts(ts_fta_bc_d1_6)
+hist(ts_fta_bc_d1_6)
 ```
 # Estimating model
 ## P/ACF plot
 ```{r}
 acf(ts_fta_bc_d1, lag.max = 50)
 pacf(ts_fta_bc_d1, lag.max = 50)
+
+acf(ts_fta_bc_d1_6, lag.max = 50)
+pacf(ts_fta_bc_d1_6, lag.max = 50)
 ```
 
-## Estimating Parameters
+## Estimating Parameters (ts_fta_bc_d1)
+### SARIMA(2, 1, 1) (0, 0, 2)6
 ```{r}
-# SARIMA(2, 1, 1) (1, 0, 2)12
-(SARIMA211_102_12 <- arima(ts_fta_bc, order = c(2, 1, 1), 
-      seasonal = list(order = c(1, 0, 2), period = 12),
+# SARIMA(2, 1, 1) (0, 0, 2)6
+(SARIMA211_002_6 <- arima(ts_fta_bc, order = c(2, 1, 1), 
+      seasonal = list(order = c(0, 0, 2), period = 6),
       method = "ML"))
-AICc(SARIMA211_102_12)
+AICc(SARIMA211_002_6)
 
-(SARIMA211_102_12_0Check <- arima(ts_fta_bc, order = c(2, 1, 1), 
-      seasonal = list(order = c(1, 0, 2), period = 12),
+(SARIMA211_002_6_0Check <- arima(ts_fta_bc, order = c(2, 1, 1), 
+      seasonal = list(order = c(0, 0, 2), period = 6),
       transform.pars = F, 
-      fixed = c(0, 0, NA, 0, 0, 0),
+      fixed = c(NA, 0 , NA, 0, NA),
       method = "ML"))
-AICc(SARIMA211_102_12_0Check)
+AICc(SARIMA211_002_6_0Check)
 ```
+
+### SARIMA(2, 1, 1) (0, 0, 1)6
+```{r}
+# SARIMA(2, 1, 1) (0, 0, 1)6
+(SARIMA211_001_6 <- arima(ts_fta_bc, order = c(2, 1, 1), 
+      seasonal = list(order = c(0, 0, 1), period = 6),
+      method = "ML"))
+AICc(SARIMA211_001_6)
+
+(SARIMA211_001_6_0Check <- arima(ts_fta_bc, order = c(2, 1, 1), 
+      seasonal = list(order = c(0, 0, 1), period = 6),
+      transform.pars = F, 
+      fixed = c(0, 0 , NA, 0),
+      method = "ML"))
+AICc(SARIMA211_001_6_0Check)
+```
+
+### SARIMA(0, 1, 1) (0, 0, 1)6
+```{r}
+# SARIMA(0, 1, 1) (0, 0, 1)6
+(SARIMA011_001_6 <- arima(ts_fta_bc, order = c(0, 1, 1), 
+      seasonal = list(order = c(0, 0, 1), period = 6),
+      method = "ML"))
+AICc(SARIMA011_001_6)
+
+(SARIMA011_001_6_0Check <- arima(ts_fta_bc, order = c(0, 1, 1), 
+      seasonal = list(order = c(0, 0, 1), period = 6),
+      transform.pars = F, 
+      fixed = c(NA, 0),
+      method = "ML"))
+AICc(SARIMA011_001_6_0Check)
+```
+
+### SARIMA(0, 1, 1) (0, 0, 2)6
+```{r}
+# SARIMA(0, 1, 1) (0, 0, 2)6
+(SARIMA011_002_6 <- arima(ts_fta_bc, order = c(0, 1, 1), 
+      seasonal = list(order = c(0, 0, 2), period = 6),
+      method = "ML"))
+AICc(SARIMA011_002_6)
+
+(SARIMA011_002_6_0Check <- arima(ts_fta_bc, order = c(0, 1, 1), 
+      seasonal = list(order = c(0, 0, 2), period = 6),
+      transform.pars = F,
+      fixed = c(NA, 0, NA),
+      method = "ML"))
+AICc(SARIMA011_002_6_0Check)
+```
+
+# Checking Roots
+### SARIMA(0, 1, 1) (0, 0, 2)6, 0 Checked Roots
 
 ```{r}
-# SARIMA(4, 1, 1) (1, 0, 2)12
-(SARIMA411_102_12 <- arima(ts_fta_bc, order = c(4, 1, 1), 
-      seasonal = list(order = c(1, 0, 2), period = 12),
-      method = "ML"))
-AICc(SARIMA411_102_12)
-
-(SARIMA411_102_12_0Check <- arima(ts_fta_bc, order = c(4, 1, 1), 
-      seasonal = list(order = c(1, 0, 2), period = 12),
-      transform.pars = F,
-      fixed = c(NA, 0, 0, 0, NA, 0, 0, 0),
-      method = "ML"))
-AICc(SARIMA411_102_12_0Check)
+plot.roots(NULL, polyroot(c(1, 0, 0.1871)), size = 3,
+           main = "SARIMA(0, 1, 1) (0, 0, 2)6, Reduced, 
+           Roots of Seasonal Moving Average")
 ```
+
+### SARIMA(2, 1, 1) (0, 0, 2)6, 0 Checked Roots
 
 ```{r}
-# SARIMA(2, 1, 2) (1, 0, 2)12
-(SARIMA212_102_12 <- arima(ts_fta_bc, order = c(2, 1, 2), 
-      seasonal = list(order = c(1, 0, 2), period = 12),
-      method = "ML"))
-AICc(SARIMA212_102_12)
+plot.roots(NULL, polyroot(c(1, 0, 0.1875)), size = 3,
+           main = "SARIMA(2, 1, 1) (0, 0, 2)6, Reduced, 
+           Roots of Seasonal Moving Average")
+```
 
-(SARIMA212_102_12_0Check <- arima(ts_fta_bc, order = c(2, 1, 2), 
-      seasonal = list(order = c(1, 0, 2), period = 12),
-      transform.pars = F,
-      fixed = c(NA, NA, NA, NA, 0, 0, 0),
-      method = "ML"))
-AICc(SARIMA212_102_12_0Check)
+### SARIMA(0, 1, 1) (0, 0, 2)6, Roots
+```{r}
+plot.roots(NULL, polyroot(c(1, 0.0768, 0.1705)), size = 3,
+           main = "SARIMA(2, 1, 1) (0, 0, 2)6, Reduced, 
+           Roots of Seasonal Moving Average")
 ```
 
 
+# Diagnostic Checking
+
+3 smallest models
+from smallest AICc to bigget AICc
+
+## SARIMA(0, 1, 1) (0, 0, 2)6, 0 Checked
+```{r}
+res1 <- residuals(SARIMA011_002_6_0Check)
+
+plot(res1, type = "l")
+
+hist(res1)
+
+qqnorm(res1)
+qqline(res1)
+
+acf(res1, lag.max = 50)
+pacf(res1, lag.max = 50)
+
+h1 <- round(sqrt(length(res1)))
+
+ar(res1, aic = TRUE, order.max = NULL, method = c("yule-walker"))
+
+shapiro.test(res1)
+Box.test(res1, lag = h1, type = "Box-Pierce", fitdf = 2)
+Box.test(res1, lag = h1, type = "Ljung-Box", fitdf = 2)
+Box.test(res1^2, lag = h1, type = "Ljung-Box", fitdf = 0)
+```
+
+## SARIMA(2, 1, 1) (0, 0, 2)6, 0 Checked
+```{r}
+res2 <- residuals(SARIMA211_002_6_0Check)
+
+plot(res2, type = "l")
+
+hist(res2)
+
+qqnorm(res2)
+qqline(res2)
+
+acf(res2, lag.max = 50)
+pacf(res2, lag.max = 50)
+
+h2 <- round(sqrt(length(res2)))
+
+ar(res2, aic = TRUE, order.max = NULL, method = c("yule-walker"))
+
+shapiro.test(res2)
+Box.test(res2, lag = h2, type = "Box-Pierce", fitdf = 3)
+Box.test(res2, lag = h2, type = "Ljung-Box", fitdf = 3)
+Box.test(res2^2, lag = h2, type = "Ljung-Box", fitdf = 0)
+```
+
+## SARIMA(0, 1, 1) (0, 0, 2)6
+```{r}
+res3 <- residuals(SARIMA011_002_6)
+
+plot(res3, type = "l")
+
+hist(res3)
+
+qqnorm(res3)
+qqline(res3)
+
+acf(res3, lag.max = 50)
+pacf(res3, lag.max = 50)
+
+h3 <- round(sqrt(length(res3)))
+
+ar(res3, aic = TRUE, order.max = NULL, method = c("yule-walker"))
+
+shapiro.test(res3)
+Box.test(res3, lag = h3, type = "Box-Pierce", fitdf = 3)
+Box.test(res3, lag = h3, type = "Ljung-Box", fitdf = 3)
+Box.test(res3^2, lag = h3, type = "Ljung-Box", fitdf = 0)
+```
