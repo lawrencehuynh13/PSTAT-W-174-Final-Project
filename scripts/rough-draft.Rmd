@@ -6,8 +6,8 @@ output: html_document
 # Initial Set Up
 ```{r}
 # uncomment for mac 
-#options(rgl.useNULL = TRUE)
-#Sys.setenv(RGL_USE_NULL = TRUE)
+options(rgl.useNULL = TRUE)
+Sys.setenv(RGL_USE_NULL = TRUE)
 
 library(tidyverse)
 library(MASS)
@@ -307,3 +307,56 @@ Box.test(res3, lag = h3, type = "Box-Pierce", fitdf = 3)
 Box.test(res3, lag = h3, type = "Ljung-Box", fitdf = 3)
 Box.test(res3^2, lag = h3, type = "Ljung-Box", fitdf = 0)
 ```
+
+# Forecast
+
+```{r}
+final_model <- SARIMA011_002_6_0Check
+
+# predicting 6 steps ahead
+pred.tr <- predict(final_model, n.ahead = 6)
+```
+
+## Forecast on Transformed Data
+```{r}
+# upper and lower bounds
+U.tr <- pred.tr$pred + 2*pred.tr$se
+L.tr <- pred.tr$pred - 2*pred.tr$se
+
+# forecast on transformed data
+ts.plot(ts_fta_bc, xlim = c(1,length(ts_fta_bc) + 6), ylim = c(min(ts_fta_bc, L.tr), max(U.tr, ts_fta_bc)))
+lines(U.tr, col = "#0000CD", lty = "dashed")
+lines(L.tr, col = "#0000CD", lty = "dashed")
+points((length(ts_fta_bc) + 1):(length(ts_fta_bc)+6), pred.tr$pred, col = "#F88158")
+```
+## Forecast on Original Series
+```{r}
+# forecast on original series
+pred.orig <- exp(pred.tr$pred)
+U = exp(U.tr)
+L = exp(L.tr)
+
+ts.plot(ts_train, xlim = c(1,length(ts_train) + 6), ylim = c(min(ts_train, L), max(U, ts_train)))
+lines(U, col = "#0000CD", lty = "dashed")
+lines(L, col = "#0000CD", lty = "dashed")
+points((length(ts_train) + 1):(length(ts_train)+6), pred.orig, col = "#F88158")
+```
+
+## Zoom in on Original Series
+```{r}
+# zoom in on original series
+ts.plot(ts_train, xlim = c(150,length(ts_train) + 6), ylim = c(min(ts_train, L), max(U, ts_train)))
+lines(U, col = "#0000CD", lty = "dashed")
+lines(L, col = "#0000CD", lty = "dashed")
+points((length(ts_train) + 1):(length(ts_train)+6), pred.orig, col = "#F88158")
+```
+
+## Zoom in Forecasts and True Values
+```{r}
+ts.plot(ts_fta, xlim = c(150,length(ts_train) + 6), ylim = c(min(ts_train, L), max(U, ts_train)))
+lines(U, col = "#0000CD", lty = "dashed")
+lines(L, col = "#0000CD", lty = "dashed")
+points((length(ts_train) + 1):(length(ts_train)+6), pred.orig, col = "red")
+points((length(ts_train) + 1):(length(ts_train)+6), pred.orig, col = "#F88158")
+```
+
