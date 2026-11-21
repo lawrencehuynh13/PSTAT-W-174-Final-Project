@@ -358,5 +358,7 @@ lines(U, col = "#0000CD", lty = "dashed")
 lines(L, col = "#0000CD", lty = "dashed")
 points((length(ts_train) + 1):(length(ts_train)+6), pred.orig, col = "red")
 points((length(ts_train) + 1):(length(ts_train)+6), pred.orig, col = "#F88158")
+
+mean(ts_test - pred.orig)
 ```
 
