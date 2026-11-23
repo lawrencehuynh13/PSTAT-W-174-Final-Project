@@ -73,12 +73,16 @@ We will be predicting the 2019 regular season free throw attempts.
 ## Initial Plot
 ```{r}
 # initial plot
+t <- 1:length(ts_train)
+
 plot.ts(ts_train, type = "l", xlab = "Time (Months)",
         ylab = "Average Free Throws Attempts", 
         main = "Average Free Throw Attempts per Month")
+abline(lm(ts_train ~ t), col = "red", lty = 2)
 
 # initial histogram
-hist(ts_train, xlab = "")
+hist(ts_train, xlab = "", freq = F)
+lines(density(ts_train), col = "dodgerblue4", lwd = 2)
 ```
 
 appears to a linear trend and changing variance 
@@ -94,6 +98,10 @@ bc_fta <- boxcox(ts_train ~ t)
 bc_fta$x[which(bc_fta$y == max(bc_fta$y))]
 
 ts_fta_bc <- log(ts_train)
+
+# his of transformed series
+hist(ts_fta_bc, xlab = "", freq = F)
+lines(density(ts_fta_bc), col = "dodgerblue4", lwd = 2)
 ```
 
 $\hat\lambda$'s confidence interval contains 0, which means the transformation we should use is log transformation. 
@@ -126,10 +134,10 @@ differencing at lag 1 once has the lowest variance so we will select $d=1$
 
 ```{r}
 plot.ts(ts_fta_bc_d1)
-hist(ts_fta_bc_d1)
 
-plot.ts(ts_fta_bc_d1_6)
-hist(ts_fta_bc_d1_6)
+# his of transformed and differenced series
+hist(ts_fta_bc_d1, xlab = "", freq = F)
+lines(density(ts_fta_bc_d1), col = "dodgerblue4", lwd = 2)
 ```
 # Estimating model
 ## P/ACF plot
@@ -359,6 +367,6 @@ lines(L, col = "#0000CD", lty = "dashed")
 points((length(ts_train) + 1):(length(ts_train)+6), pred.orig, col = "red")
 points((length(ts_train) + 1):(length(ts_train)+6), pred.orig, col = "#F88158")
 
-mean(ts_test - pred.orig)
+mean(abs(ts_test - pred.orig))
 ```
 
