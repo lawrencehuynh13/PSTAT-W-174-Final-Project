@@ -250,7 +250,8 @@ res1 <- residuals(SARIMA011_002_6_0Check)
 
 plot(res1, type = "l")
 
-hist(res1)
+hist(res1, freq = F, ylim = c(0, 13))
+lines(density(res1), col = "dodgerblue4", lwd = 2)
 
 qqnorm(res1)
 qqline(res1)
@@ -274,7 +275,8 @@ res2 <- residuals(SARIMA211_002_6_0Check)
 
 plot(res2, type = "l")
 
-hist(res2)
+hist(res2, freq = F, ylim = c(0, 13))
+lines(density(res2), col = "dodgerblue4", lwd = 2)
 
 qqnorm(res2)
 qqline(res2)
