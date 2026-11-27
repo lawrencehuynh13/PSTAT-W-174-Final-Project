@@ -1,5 +1,260 @@
 ---
-title: "write-up-draft"
+title: "Predicting Monthly Averages of Free Throw Attempts in the NBA"
+subtitle: "PSTATW 174"
+author: "Lawrence Huynh"
 output: pdf_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, warning = F, message = F)
+```
+
+```{r}
+# uncomment for mac 
+options(rgl.useNULL = TRUE)
+Sys.setenv(RGL_USE_NULL = TRUE)
+
+library(tidyverse)
+library(MASS)
+library(ggplot2)
+library(ggfortify)
+library(qpcR)
+source("../class_resources/plot.roots.R")
+set.seed(13)
+```
+
+# Introduction
+
+Free throws, everyone’s least favorite form of scoring in the NBA. In recent years, free throw attempts have been one of the most talked-about statistics when it comes to assessing the skills of a player's offense. This talking point has been amplified by the most recent Most Valuable Player of the NBA, Shai Gilgeous-Alexander, and his play style, which leads to him being called a flopper. This term is given to players who are seen to exaggerate contact and flail in order to get a foul called on the opposing team. With inspiration from this, I wanted to know if it was possible to accurately predict the average free throw attempts taken by teams every month. While I was not successful in predicting this, the predictions themselves were not too far off and leaves room for another model that can accurately achieve the original goal.
+
+## Data
+
+```{r}
+# reading in original data
+team_stats <- read.csv('../data/TeamStatistics.csv')
+
+# formatting data as monthly averages of free throw 
+fta_monthly <- team_stats %>%
+  # only looking at Regular Season games
+  filter(gameType == "Regular Season") %>%
+  
+  # formatting as monthly events
+  mutate(year_month = floor_date(as_date(gameDate), "month")) %>%
+  group_by(year_month) %>%
+  
+  # average fta per month
+  summarise(fta_monthly = mean(freeThrowsAttempted, na.rm = T),
+            n_games = n()) %>%
+  
+  # filtering out seasons before year 1980 and after 2019
+  filter(year_month >= "1990-10-1", year_month < "2019-10-1") %>%
+  
+  mutate(m = month(year_month), 
+         season = if_else(m >= 10, year(year_month), year(year_month) - 1L))
+
+# removing months 5 and 10
+ts_fta <- fta_monthly %>%
+  filter(!(m %in% c(5,10))) %>%
+  arrange(year_month) %>%
+  pull(fta_monthly) %>% 
+  ts()
+
+# splitting data 
+ts_train <- ts_fta[1:162]
+ts_test <- ts_fta[163:168]
+```
+
+For this report, R was the primary language used for all of the coding, and the data was sourced from a Kaggle dataset called “NBA Dataset: Box Scores and Stats (1947 - Today)”. Specifically, I used “TeamStatistics.csv” which captures the box score from every game from 1947 to today. For the focus of this report, I only looked at the years 1990-2019 and regular-season games from November-April. I decided to cut the years off at 2019 because the 2020 season of the NBA went on lockdown because of COVID, which created irregularities in the data. The model was trained on the years 1990-2018 and predicts the monthly average free throw attempts in the year 2019.
+
+\newpage
+
+# Peaking at the Data
+```{r, fig.height=2.5}
+par(mfrow = c(1,2))
+# initial plot
+t <- 1:length(ts_train)
+
+plot.ts(ts_train, type = "l", xlab = "Time (Months)",
+        ylab = "Average Free Throws", 
+        main = "Average Monthly Free Throw Attempts")
+abline(lm(ts_train ~ t), col = "red", lty = 2)
+
+# initial histogram
+hist(ts_train, xlab = "", freq = F)
+lines(density(ts_train), col = "dodgerblue4", lwd = 2)
+```
+
+Looking at the plot of monthly average free throw attempts over time, it is apparent that the data shows a negative linear trend. This means the series lacks a constant mean and is not stationary. In terms of seasonality, it’s hard to tell whether there is a seasonal component at a quick glance. There may be no seasonal term, but more testing would be required to make a firm conclusion on this. Looking at the histogram of the series, it appears to be centered at 25 with a resemblance to a bell-shaped curve. This hints that the series could be approximately normal via the eye test.
+
+# Transforming the Series
+## Box-Cox Transformations
+While visually the series doesn’t have any major changes in variance, using the boxcox function in R tells us that a transformation should be used to stabilize the variance and further normalize the series. 
+
+```{r, fig.height=2.5}
+par(mfrow = c(1,2))
+
+t <- 1:length(ts_train)
+
+bc_fta <- boxcox(ts_train ~ t)
+
+ts_fta_bc <- log(ts_train)
+
+# his of transformed series
+hist(ts_fta_bc, xlab = "", freq = F)
+lines(density(ts_fta_bc), col = "dodgerblue4", lwd = 2)
+```
+
+The confidence interval for lambda is approximately [-1.5, 1.5], with an estimate of 0.0606. With this information, the most appropriate transformation to apply to the series is a log transformation. Looking at the histogram of the transformed data, the histogram now resembles a bell-shaped curve even more than before.
+
+\newpage
+
+## Differencing the Series
+```{r, fig.height=3.5}
+y <- ts(as.numeric(ts_fta_bc), frequency = 6)
+
+decomp <- decompose(y)
+
+plot(decomp)
+```
+
+There are two main takeaways from looking at the decomposition of the data. The first one is that the suspicions that there is a linear trend within the series are true. Second, there exists a seasonal trend within the data. After differencing at lag 1 once, lag 1 twice, lag 6 once, and lag 1 and then 6, the differenced series that had the lowest variance was differencing once at lag 1. The seasonal component was determined to be 6 because within the confines of this project, a season is approximately 6 full months long.
+
+```{r, fig.height=3}
+par(mfrow = c(1,2))
+ts_fta_bc_d1 <- diff(ts_fta_bc, lag = 1)
+
+plot.ts(ts_fta_bc_d1)
+
+# his of transformed and differenced series
+hist(ts_fta_bc_d1, xlab = "", freq = F)
+lines(density(ts_fta_bc_d1), col = "dodgerblue4", lwd = 2)
+```
+
+Looking at the series after its transformation and differencing, there appears to be no more linear trend and a stabilization in variance, which were the main issues before. This finally leads to the series being stationary.
+
+\newpage
+
+# Model Identification
+```{r, fig.height=3}
+acf(ts_fta_bc_d1, lag.max = 50)
+```
+
+Looking at the plot of the autocorrelation function (ACF), 3 lags stand out to me. The first of the three lags was lag 1, hinting towards the fact that q may equal 1 for the model. The other two lags that stood out to me were lags 6 and 12. While this could indicate that q is equal to 6 or 12 as well, it more importantly indicates that Q is equal to 1 or 2 with s equaling 6.
+
+```{r, fig.height=3}
+pacf(ts_fta_bc_d1, lag.max = 50)
+```
+
+Looking at the plot of the partial autocorrelation function (PACF) shows that lags 1, 2, and 12 are significant and that p and P may be equal to 2. However, there is a possibility that the behavior of the PACF is a result of q equaling 1. This means that there is a possibility that p and P could equal 0. With these options for p, P, q, and Q, I proceeded to identify the best SARIMA model based on the AICc.
+
+```{r, results='hide'}
+# SARIMA(2, 1, 1) (0, 0, 2)6
+(SARIMA211_002_6 <- arima(ts_fta_bc, order = c(2, 1, 1), 
+      seasonal = list(order = c(0, 0, 2), period = 6),
+      method = "ML"))
+
+(SARIMA211_002_6_0Check <- arima(ts_fta_bc, order = c(2, 1, 1), 
+      seasonal = list(order = c(0, 0, 2), period = 6),
+      transform.pars = F, 
+      fixed = c(NA, 0 , NA, 0, NA),
+      method = "ML"))
+
+# SARIMA(2, 1, 1) (0, 0, 1)6
+(SARIMA211_001_6 <- arima(ts_fta_bc, order = c(2, 1, 1), 
+      seasonal = list(order = c(0, 0, 1), period = 6),
+      method = "ML"))
+
+(SARIMA211_001_6_0Check <- arima(ts_fta_bc, order = c(2, 1, 1), 
+      seasonal = list(order = c(0, 0, 1), period = 6),
+      transform.pars = F, 
+      fixed = c(0, 0 , NA, 0),
+      method = "ML"))
+
+# SARIMA(0, 1, 1) (0, 0, 1)6
+(SARIMA011_001_6 <- arima(ts_fta_bc, order = c(0, 1, 1), 
+      seasonal = list(order = c(0, 0, 1), period = 6),
+      method = "ML"))
+
+(SARIMA011_001_6_0Check <- arima(ts_fta_bc, order = c(0, 1, 1), 
+      seasonal = list(order = c(0, 0, 1), period = 6),
+      transform.pars = F, 
+      fixed = c(NA, 0),
+      method = "ML"))
+
+# SARIMA(0, 1, 1) (0, 0, 2)6
+(SARIMA011_002_6 <- arima(ts_fta_bc, order = c(0, 1, 1), 
+      seasonal = list(order = c(0, 0, 2), period = 6),
+      method = "ML"))
+
+(SARIMA011_002_6_0Check <- arima(ts_fta_bc, order = c(0, 1, 1), 
+      seasonal = list(order = c(0, 0, 2), period = 6),
+      transform.pars = F,
+      fixed = c(NA, 0, NA),
+      method = "ML"))
+```
+
+
+The first model I had was a $SARIMA(2, 1, 1) (0, 0, 2)_6$, which had an AICc of -634.2562. The confidence intervals for the coefficients AR2 and SMA1 included 0, so after setting those values to 0, there was a new model with an AICc of -636.2311.
+
+The second model was a $SARIMA(2, 1, 1) (0, 0, 1)_6$ model with an AICc of -630.6523. Like the first model, this one had coefficients with zero in their confidence intervals. After setting AR1, AR2, and SMA1 to 0, the model had an AICc of -632.8294.
+
+The third model was a $SARIMA(0, 1, 1) (0, 0, 1)_6$ model with an AICc of -633.1492. This model only had one coefficient with a 0 in its confidence interval, and after setting SMA1 to 0, the model had an AICc of -633.0087.
+
+The last model checked was $SARIMA(0, 1, 1) (0, 0, 2)_6$, which had an AICc of -635.8101. The same story goes for this model, where SMA1 has a 0 in its confidence interval. After setting it to 0, it has an AICc of -636.9463.
+
+The models with the lowest AICc’s were $SARIMA(0, 1, 1) (0, 0, 2)_6$, with SMA1 coefficient set to 0, and $SARIMA(2, 1, 1) (0, 0, 2)_6$, with AR2 and SMA1 coefficients set to 0. These are the models chosen to proceed with diagnostic checking.
+
+# Diagnostic Checking
+## $SARIMA(0, 1, 1) (0, 0, 2)_6$, with SMA1 coefficient set to 0
+```{r, fig.height=2.75, fig.width=2.75}
+plot.roots(NULL, polyroot(c(1, 0, 0.1871)), size = 3,
+           main = "SARIMA(0, 1, 1) (0, 0, 2)6, Reduced, 
+           Roots of Seasonal Moving Average")
+```
+
+This model is purely a moving average model, so it can be assumed that it’s stationary. $|\theta_1| < 1$ and the roots of the seasonal moving average component lie outside of the unit circle, so it can be inferred that the model is invertible. 
+
+```{r, fig.height=3}
+res1 <- residuals(SARIMA011_002_6_0Check)
+
+plot(res1, type = "l")
+```
+
+The residuals seem to be stationary, with no clear indication of linear trend, seasonal trend, major change in variance, or major spikes.
+
+```{r, fig.height=3}
+par(mfrow = c(1,2))
+
+hist(res1, freq = F, ylim = c(0, 13))
+lines(density(res1), col = "dodgerblue4", lwd = 2)
+
+qqnorm(res1)
+qqline(res1)
+```
+
+Looking at the histogram of residuals, the residuals take on a bell-shaped curve, indicating that the distribution of residuals is normal. Looking at the Q-Q plot, the same story is repeated, where a majority of the points lie on the line. There are points on the right side of the plot that deviate away from the Q-Q line but overall the plot is hinting towards the fact that the residuals are Gaussian. 
+
+```{r}
+par(mfrow = c(1,2))
+acf(res1, lag.max = 25)
+pacf(res1, lag.max = 25)
+```
+
+Both of the plots of ACF and PACF show no significant lags at any point. Because they are insignificant, they can be counted as zeros.
+
+\newpage
+
+```{r}
+h1 <- round(sqrt(length(res1)))
+
+ar(res1, aic = TRUE, order.max = NULL, method = c("yule-walker"))
+
+shapiro.test(res1)
+Box.test(res1, lag = h1, type = "Box-Pierce", fitdf = 2)
+Box.test(res1, lag = h1, type = "Ljung-Box", fitdf = 2)
+Box.test(res1^2, lag = h1, type = "Ljung-Box", fitdf = 0)
+```
+
+The order of the residuals is selected to be 0. None of the tests for linear and non-linear dependence fail, meaning that the residuals have no linear or non-linear dependence. While the model passed every test so far, it did end up rejecting the null hypothesis of the Shapiro-Wilk test. This indicates that the distribution of the residuals of this model is not normal. This will be addressed after the diagnostic checking of SARIMA(2, 1, 1) (0, 0, 2)6, with coefficients set to 0.
+
+\newpage
